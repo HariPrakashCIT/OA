@@ -15,7 +15,10 @@ It matches the exact API the website already calls, so no frontend change is nee
 |---|---|---|---|
 | GET | `/api/devices` | website | Your paired insoles (`id`, `name`, `online`, …) |
 | POST | `/api/devices` | register script | Pair an insole, returns its `device_key` once |
-| DELETE | `/api/devices/{id}` | – | Remove an insole and its data |
+| PATCH | `/api/devices/{id}` | manage page | Rename / change board (`{name, board: esp32\|esp8266}`) |
+| POST | `/api/devices/{id}/key` | manage page | New device key (old one stops working) |
+| DELETE | `/api/devices/{id}` | manage page | Remove an insole and its data |
+| GET | `/manage` | browser | **Manage insoles page** (add, view, rename, re-key, delete) |
 | POST | `/api/ingest` | ESP32 | Store readings. Header `X-Device-Key`. Body `{heel, ball, toe}` or `{readings:[{heel,ball,toe,age_ms}]}` |
 | GET | `/api/readings?device_id=&days=1\|7\|30` | website | `{readings:[…newest first], truncated}` (max 50,000) |
 | GET/POST | `/api/sessions` | website | List / start walking session (`{device_id}`; insole must be online) |
@@ -65,6 +68,11 @@ On the website click **Set up connection** and enter:
 Then create an account / sign in on the website.
 
 ## 5. Pair the insole
+**Easiest:** open `https://<your-backend>/manage`, sign in with your website account and click
+**Add insole**. Pick the board (ESP8266 NodeMCU or ESP32); it shows the key, the firmware lines to
+paste and the wiring. You can rename, switch board, make a new key or delete insoles there any time.
+
+Or from the command line:
 ```bash
 python scripts/register_device.py --api https://osteocare-api.onrender.com \
   --supabase https://your-project.supabase.co --anon YOUR_ANON_KEY \
@@ -72,10 +80,15 @@ python scripts/register_device.py --api https://osteocare-api.onrender.com \
 ```
 It prints a `device_key` (shown only once).
 
-## 6. Flash the ESP32
-Open `firmware/osteocare_insole/osteocare_insole.ino` in Arduino IDE, set Wi-Fi name/password,
-`API_URL` (`https://<your-backend>/api/ingest`) and `DEVICE_KEY`, then upload.
-Wiring: `3V3 – FSR – GPIO – 10 kΩ – GND` for heel (GPIO34), ball (GPIO35), toe (GPIO32).
+## 6. Flash the board
+Both boards send the same data, so the backend treats them the same.
+
+| Board | Firmware | Wiring |
+|---|---|---|
+| ESP8266 NodeMCU | `firmware/osteocare_insole_esp8266/` | D5/D6/D7 → each FSR → A0, one 10 kΩ A0→GND |
+| ESP32 | `firmware/osteocare_insole/` | `3V3 – FSR – GPIO – 10 kΩ – GND` on GPIO34 (heel), 35 (ball), 32 (toe) |
+
+Set Wi-Fi name/password, `API_URL` (`https://<your-backend>/api/ingest`) and `DEVICE_KEY`, then upload.
 The Serial Monitor (115200) shows `sent 10 samples …` once it works, and the website switches to online.
 
 ## Notes

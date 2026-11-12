@@ -5,12 +5,14 @@ import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,7 +36,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Device-Key"],
 )
 
@@ -43,6 +45,10 @@ app.add_middleware(
 
 def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def new_key() -> str:
+    return "oc_" + secrets.token_urlsafe(24)
 
 
 def is_online(device: Device) -> bool:
@@ -67,6 +73,7 @@ def device_out(d: Device) -> dict:
     return {
         "id": d.id,
         "name": d.name,
+        "board": d.board or "esp8266",
         "created_at": iso(d.created_at),
         "last_seen_at": iso(d.last_seen_at),
         "online": is_online(d),
@@ -100,8 +107,17 @@ def get_profile(db: Session, user: str) -> Profile:
 
 # ---------- schemas ----------
 
+Board = Literal["esp32", "esp8266"]
+
+
 class DeviceIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    board: Board = "esp8266"
+
+
+class DeviceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    board: Board | None = None
 
 
 class SessionIn(BaseModel):
@@ -146,7 +162,22 @@ class IngestIn(BaseModel):
 
 @app.get("/")
 def health():
-    return {"status": "ok", "service": "OsteoCare AI API"}
+    return {"status": "ok", "service": "OsteoCare AI API", "manage_insoles": "/manage"}
+
+
+MANAGE_PAGE = Path(__file__).resolve().parent / "static" / "manage.html"
+
+
+@app.get("/manage", include_in_schema=False)
+def manage_page():
+    """Page to add, view, rename, re-key and remove insoles (ESP32 / ESP8266)."""
+    return FileResponse(MANAGE_PAGE, media_type="text/html")
+
+
+@app.get("/api/public-config")
+def public_config():
+    """Public Supabase settings the manage page needs to sign in (the anon key is public by design)."""
+    return {"supabase_url": settings.supabase_url, "supabase_anon_key": settings.supabase_anon_key}
 
 
 @app.get("/api/devices")
@@ -158,9 +189,32 @@ def list_devices(user: str = Depends(current_user), db: Session = Depends(get_db
 @app.post("/api/devices", status_code=201)
 def create_device(body: DeviceIn, user: str = Depends(current_user), db: Session = Depends(get_db)):
     """Pairs a new insole. The device_key is shown only once: put it in the ESP32 firmware."""
-    key = "oc_" + secrets.token_urlsafe(24)
-    d = Device(id="insole-" + secrets.token_hex(4), owner_id=user, name=body.name.strip(), key_hash=hash_key(key))
+    key = new_key()
+    d = Device(id="insole-" + secrets.token_hex(4), owner_id=user, name=body.name.strip(),
+               board=body.board, key_hash=hash_key(key))
     db.add(d)
+    db.commit()
+    return {**device_out(d), "device_key": key}
+
+
+@app.patch("/api/devices/{device_id}")
+def update_device(device_id: str, body: DeviceUpdate, user: str = Depends(current_user), db: Session = Depends(get_db)):
+    """Rename an insole or change its board type (ESP32 / ESP8266)."""
+    d = own_device(db, user, device_id)
+    if body.name is not None:
+        d.name = body.name.strip()
+    if body.board is not None:
+        d.board = body.board
+    db.commit()
+    return device_out(d)
+
+
+@app.post("/api/devices/{device_id}/key")
+def rotate_device_key(device_id: str, user: str = Depends(current_user), db: Session = Depends(get_db)):
+    """Makes a new device key. The old key stops working immediately; flash the new one."""
+    d = own_device(db, user, device_id)
+    key = new_key()
+    d.key_hash = hash_key(key)
     db.commit()
     return {**device_out(d), "device_key": key}
 

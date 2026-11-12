@@ -2,6 +2,8 @@
 
 The website has no "add insole" button yet, so run this once per insole:
 
+    (Easier: open https://<your-backend>/manage in a browser.)
+
     python scripts/register_device.py --api https://your-backend.onrender.com \
         --supabase https://your-project.supabase.co --anon YOUR_ANON_KEY \
         --email you@example.com --name "My insole"
@@ -22,6 +24,7 @@ def main() -> None:
     p.add_argument("--anon", required=True, help="Supabase anon / publishable key")
     p.add_argument("--email", required=True)
     p.add_argument("--name", default="My insole")
+    p.add_argument("--board", choices=["esp8266", "esp32"], default="esp8266")
     a = p.parse_args()
 
     password = getpass.getpass("Website password: ")
@@ -39,7 +42,7 @@ def main() -> None:
     r = httpx.post(
         f"{a.api.rstrip('/')}/api/devices",
         headers={"Authorization": f"Bearer {token}"},
-        json={"name": a.name},
+        json={"name": a.name, "board": a.board},
         timeout=15,
     )
     if r.status_code != 201:

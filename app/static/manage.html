@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OsteoCare AI · Manage insoles</title>
+<meta name="theme-color" content="#173d34">
+<style>
+  :root { --green:#173d34; --green2:#294f42; --lime:#d6f378; --bg:#f4f6f1; --card:#fff; --line:#e3e8e1;
+          --muted:#6b756f; --red:#b3402f; --ok:#2f8a4f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:#1d2a24; }
+  header { background:var(--green); color:#fff; padding:18px 24px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header .logo { width:34px; height:34px; border-radius:9px; background:var(--lime); color:var(--green);
+                 display:grid; place-items:center; font-weight:800; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header small { opacity:.75; display:block; font-size:12px; }
+  header .right { margin-left:auto; display:flex; gap:10px; align-items:center; font-size:13px; }
+  header a { color:var(--lime); }
+  main { max-width:920px; margin:0 auto; padding:24px 18px 60px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:18px; }
+  h2 { font-size:16px; margin:0 0 4px; color:var(--green); }
+  p.sub { margin:0 0 14px; color:var(--muted); font-size:13px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fff; }
+  input:focus, select:focus { outline:2px solid var(--lime); border-color:var(--green2); }
+  .row { display:grid; grid-template-columns:2fr 1.3fr auto; gap:10px; align-items:end; }
+  button { font:inherit; border-radius:10px; padding:10px 14px; border:1px solid var(--green); background:var(--green);
+           color:#fff; cursor:pointer; white-space:nowrap; }
+  button.ghost { background:#fff; color:var(--green); }
+  button.danger { background:#fff; color:var(--red); border-color:#e4c2bc; }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { padding:10px 14px; border-radius:10px; margin-bottom:16px; font-size:14px; display:none; }
+  .msg.err { background:#fbecea; color:var(--red); display:block; }
+  .msg.ok { background:#eaf5ec; color:var(--ok); display:block; }
+  .dev { border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:12px; }
+  .dev .top { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .badge { font-size:12px; padding:3px 10px; border-radius:99px; background:#eef1ec; color:var(--muted); }
+  .badge.on { background:#e2f4e6; color:var(--ok); }
+  .dot { width:8px; height:8px; border-radius:50%; background:#b9c1bb; display:inline-block; margin-right:6px; }
+  .on .dot { background:var(--ok); box-shadow:0 0 0 3px #2f8a4f22; }
+  .meta { color:var(--muted); font-size:12px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .keybox { background:#10261f; color:#e8f3d0; border-radius:12px; padding:14px; font:13px/1.55 ui-monospace,Consolas,monospace;
+            white-space:pre-wrap; word-break:break-all; margin:10px 0; }
+  .warn { background:#fff7e0; border:1px solid #f0dc9c; color:#6d5410; border-radius:10px; padding:10px 12px; font-size:13px; }
+  .wiring { font:12.5px/1.5 ui-monospace,Consolas,monospace; background:#f6f8f4; border-radius:10px; padding:12px; white-space:pre; overflow:auto; }
+  .empty { color:var(--muted); text-align:center; padding:26px 0; }
+  .hidden { display:none !important; }
+  @media (max-width:640px) { .row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">OC</div>
+  <div><h1>Manage insoles</h1><small>OsteoCare AI · ESP32 &amp; ESP8266 NodeMCU</small></div>
+  <div class="right">
+    <span id="who"></span>
+    <button id="signout" class="ghost hidden" style="padding:6px 12px">Sign out</button>
+    <a href="https://osteocare-ai-mobility-monitor.packedsesame1.chatgpt.site/">Back to dashboard →</a>
+  </div>
+</header>
+
+<main>
+  <div id="msg" class="msg"></div>
+
+  <!-- Sign in -->
+  <section id="auth" class="card hidden">
+    <h2>Sign in</h2>
+    <p class="sub">Use the same email and password as on the OsteoCare website.</p>
+    <form id="authForm">
+      <div class="row" style="grid-template-columns:1fr 1fr auto">
+        <div><label for="email">Email</label><input id="email" type="email" required autocomplete="email"></div>
+        <div><label for="password">Password</label><input id="password" type="password" required autocomplete="current-password"></div>
+        <button type="submit">Sign in</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="app" class="hidden">
+    <!-- Add -->
+    <section class="card">
+      <h2>Add an insole</h2>
+      <p class="sub">Creates the insole in your account and gives you a key to put in its firmware.</p>
+      <form id="addForm" class="row">
+        <div><label for="newName">Name</label><input id="newName" maxlength="80" placeholder="e.g. Right insole" required></div>
+        <div><label for="newBoard">Board</label>
+          <select id="newBoard"><option value="esp8266">ESP8266 NodeMCU</option><option value="esp32">ESP32</option></select></div>
+        <button type="submit">Add insole</button>
+      </form>
+    </section>
+
+    <!-- Key shown once -->
+    <section id="keyPanel" class="card hidden">
+      <h2 id="keyTitle">Device key</h2>
+      <div class="warn">This key is shown only once. Copy it into the firmware now. If you lose it, click “New key” on the insole.</div>
+      <div class="keybox" id="snippet"></div>
+      <div class="actions">
+        <button id="copySnippet">Copy firmware lines</button>
+        <button id="closeKey" class="ghost">Done</button>
+      </div>
+      <h2 style="margin-top:18px">Wiring &amp; firmware file</h2>
+      <div class="wiring" id="wiring"></div>
+    </section>
+
+    <!-- List -->
+    <section class="card">
+      <h2>Your insoles</h2>
+      <p class="sub">Online means a reading arrived in the last 10 seconds. Updates every 5 seconds.</p>
+      <div id="list"><div class="empty">Loading…</div></div>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const API = location.origin;
+const BOARD = { esp32: "ESP32", esp8266: "ESP8266 NodeMCU" };
+const WIRING = {
+  esp8266:
+`Firmware file: firmware/osteocare_insole_esp8266/osteocare_insole_esp8266.ino
+Board in Arduino IDE: NodeMCU 1.0 (ESP-12E Module)
+
+D5 ── FSR heel ──┐
+D6 ── FSR ball ──┼── A0
+D7 ── FSR toe  ──┘
+                 │
+               10 kΩ
+                 │
+                GND`,
+  esp32:
+`Firmware file: firmware/osteocare_insole/osteocare_insole.ino
+Board in Arduino IDE: ESP32 Dev Module
+
+3V3 ── FSR heel ── GPIO34 ── 10 kΩ ── GND
+3V3 ── FSR ball ── GPIO35 ── 10 kΩ ── GND
+3V3 ── FSR toe  ── GPIO32 ── 10 kΩ ── GND`,
+};
+
+let sb = null, devices = [], timer = null;
+const $ = id => document.getElementById(id);
+
+function show(text, kind = "err") {
+  const m = $("msg"); m.textContent = text; m.className = "msg " + kind;
+  if (kind === "ok") setTimeout(() => { if (m.textContent === text) m.className = "msg"; }, 4000);
+}
+function clearMsg() { $("msg").className = "msg"; }
+
+async function token() {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) throw new Error("Please sign in again.");
+  return data.session.access_token;
+}
+
+async function api(path, method = "GET", body) {
+  const r = await fetch(API + path, {
+    method,
+    headers: { Authorization: "Bearer " + await token(), "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 204) return null;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = data.detail;
+    throw new Error(typeof d === "string" ? d : Array.isArray(d) ? (d[0]?.msg || "Invalid input") : "Request failed");
+  }
+  return data;
+}
+
+function ago(iso) {
+  if (!iso) return "never";
+  const s = Math.round((Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return s + " s ago";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  if (s < 86400) return Math.round(s / 3600) + " h ago";
+  return new Date(iso).toLocaleString();
+}
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const k of kids) e.append(k);
+  return e;
+}
+
+function renderList() {
+  const list = $("list"); list.innerHTML = "";
+  if (!devices.length) {
+    list.append(el("div", { class: "empty" }, "No insoles yet. Add one above."));
+    return;
+  }
+  for (const d of devices) {
+    const name = el("input", { value: d.name, maxlength: "80" });
+    const board = el("select", {},
+      ...Object.entries(BOARD).map(([v, t]) => { const o = el("option", { value: v }, t); if (v === d.board) o.selected = true; return o; }));
+    const badge = el("span", { class: "badge" + (d.online ? " on" : ""), id: "b-" + d.id },
+      el("span", { class: "dot" }), d.online ? "Online" : "Offline");
+    const save = el("button", { onclick: () => run(async () => {
+      await api("/api/devices/" + encodeURIComponent(d.id), "PATCH", { name: name.value.trim(), board: board.value });
+      show("Saved " + name.value.trim(), "ok"); await load(true);
+    }) }, "Save changes");
+    const rekey = el("button", { class: "ghost", onclick: () => {
+      if (!confirm("Make a new key for \"" + d.name + "\"?\nThe old key stops working right away, so you must re-upload the firmware.")) return;
+      run(async () => { const r = await api("/api/devices/" + encodeURIComponent(d.id) + "/key", "POST"); showKey(r); await load(true); });
+    } }, "New key");
+    const del = el("button", { class: "danger", onclick: () => {
+      if (!confirm("Delete \"" + d.name + "\"?\nThis also deletes all its readings, sessions and reports. This cannot be undone.")) return;
+      run(async () => { await api("/api/devices/" + encodeURIComponent(d.id), "DELETE"); show("Deleted " + d.name, "ok"); await load(true); });
+    } }, "Delete");
+
+    list.append(el("div", { class: "dev" },
+      el("div", { class: "top" }, badge,
+        el("strong", {}, d.name),
+        el("span", { class: "meta" }, BOARD[d.board] || d.board),
+        el("span", { class: "meta", style: "margin-left:auto", id: "s-" + d.id }, "Last reading: " + ago(d.last_seen_at))),
+      el("div", { class: "row", style: "grid-template-columns:2fr 1.3fr" },
+        el("div", {}, el("label", {}, "Name"), name),
+        el("div", {}, el("label", {}, "Board"), board)),
+      el("div", { class: "meta", style: "margin-top:8px" }, "Insole ID: " + d.id),
+      el("div", { class: "actions" }, save, rekey, del)));
+  }
+}
+
+function updateStatus() {
+  for (const d of devices) {
+    const b = $("b-" + d.id), s = $("s-" + d.id);
+    if (b) { b.className = "badge" + (d.online ? " on" : ""); b.lastChild.textContent = d.online ? "Online" : "Offline"; }
+    if (s) s.textContent = "Last reading: " + ago(d.last_seen_at);
+  }
+}
+
+async function load(force) {
+  const fresh = await api("/api/devices");
+  const sameSet = !force && fresh.length === devices.length && fresh.every((d, i) => d.id === devices[i].id);
+  devices = fresh;
+  sameSet ? updateStatus() : renderList();
+}
+
+function showKey(r) {
+  $("keyTitle").textContent = "Device key for " + r.name + " (" + (BOARD[r.board] || r.board) + ")";
+  $("snippet").textContent =
+`const char* WIFI_SSID     = "YOUR_WIFI_NAME";      // 2.4 GHz Wi-Fi or phone hotspot
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* API_URL       = "${API}/api/ingest";
+const char* DEVICE_KEY    = "${r.device_key}";`;
+  $("wiring").textContent = WIRING[r.board] || "";
+  $("keyPanel").classList.remove("hidden");
+  $("keyPanel").scrollIntoView({ behavior: "smooth" });
+}
+
+async function run(fn) {
+  clearMsg();
+  const btns = document.querySelectorAll("button"); btns.forEach(b => b.disabled = true);
+  try { await fn(); } catch (e) { show(e.message || String(e)); }
+  finally { btns.forEach(b => b.disabled = false); }
+}
+
+function signedIn(session) {
+  $("auth").classList.toggle("hidden", !!session);
+  $("app").classList.toggle("hidden", !session);
+  $("signout").classList.toggle("hidden", !session);
+  $("who").textContent = session ? session.user.email : "";
+  clearInterval(timer);
+  if (session) {
+    run(() => load(true));
+    timer = setInterval(() => load(false).catch(() => {}), 5000);
+  }
+}
+
+$("authForm").addEventListener("submit", e => {
+  e.preventDefault();
+  run(async () => {
+    const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+    if (error) throw error;
+  });
+});
+$("signout").addEventListener("click", () => sb.auth.signOut());
+$("addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  run(async () => {
+    const r = await api("/api/devices", "POST", { name: $("newName").value.trim(), board: $("newBoard").value });
+    $("newName").value = ""; showKey(r); await load(true);
+  });
+});
+$("copySnippet").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("snippet").textContent); show("Copied. Paste it at the top of the firmware file.", "ok"); }
+  catch { show("Could not copy automatically. Select the text and copy it."); }
+});
+$("closeKey").addEventListener("click", () => $("keyPanel").classList.add("hidden"));
+
+(async () => {
+  try {
+    const cfg = await fetch(API + "/api/public-config").then(r => r.json());
+    if (!cfg.supabase_url || !cfg.supabase_anon_key) throw new Error("The backend is missing SUPABASE_URL / SUPABASE_ANON_KEY.");
+    sb = supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+    const { data } = await sb.auth.getSession();
+    signedIn(data.session);
+    sb.auth.onAuthStateChange((_event, session) => signedIn(session));
+  } catch (e) {
+    show("Could not start: " + (e.message || e));
+  }
+})();
+</script>
+</body>
+</html>

@@ -10,6 +10,8 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -45,6 +47,7 @@ class Device(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     owner_id: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(80))
+    board: Mapped[str] = mapped_column(String(16), default="esp8266")  # "esp32" or "esp8266"
     key_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -92,6 +95,12 @@ class Profile(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    # Small migration for databases created before the "board" column existed.
+    cols = {c["name"] for c in inspect(engine).get_columns("devices")}
+    if "board" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE devices ADD COLUMN board VARCHAR(16) DEFAULT 'esp8266'"))
+            conn.execute(text("UPDATE devices SET board = 'esp8266' WHERE board IS NULL"))
 
 
 def get_db():

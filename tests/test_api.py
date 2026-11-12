@@ -99,3 +99,31 @@ def test_report_without_data(client):
     dev = pair(client)
     r = client.post("/api/reports", json={"device_id": dev["id"], "period": "week"})
     assert r.status_code == 422 and "No sensor readings" in r.json()["detail"]
+
+
+def test_manage_devices(client):
+    r = client.post("/api/devices", json={"name": "Right insole", "board": "esp32"})
+    assert r.status_code == 201 and r.json()["board"] == "esp32"
+    dev = r.json()
+    assert client.post("/api/devices", json={"name": "Bad", "board": "arduino"}).status_code == 422
+    assert client.post("/api/devices", json={"name": "Default"}).json()["board"] == "esp8266"
+
+    up = client.patch(f"/api/devices/{dev['id']}", json={"name": "Left insole", "board": "esp8266"})
+    assert up.status_code == 200 and up.json()["name"] == "Left insole" and up.json()["board"] == "esp8266"
+
+    old_key = dev["device_key"]
+    new = client.post(f"/api/devices/{dev['id']}/key").json()["device_key"]
+    assert new != old_key
+    ok = {"heel": 1, "ball": 2, "toe": 3}
+    assert client.post("/api/ingest", json=ok, headers={"X-Device-Key": old_key}).status_code == 401
+    assert client.post("/api/ingest", json=ok, headers={"X-Device-Key": new}).status_code == 200
+
+    assert client.delete(f"/api/devices/{dev['id']}").status_code == 204
+    assert all(d["id"] != dev["id"] for d in client.get("/api/devices").json())
+
+
+def test_manage_page_and_config(client):
+    page = client.get("/manage")
+    assert page.status_code == 200 and "Manage insoles" in page.text
+    cfg = client.get("/api/public-config").json()
+    assert set(cfg) == {"supabase_url", "supabase_anon_key"}
